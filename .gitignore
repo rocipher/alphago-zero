@@ -1,0 +1,8 @@
+__pycache__
+out
+notebooks
+.vscode
+.ipynb_checkpoints
+*.pyc
+*.h5
+*.hdf5
