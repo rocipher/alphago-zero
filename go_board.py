@@ -48,9 +48,14 @@ class GoBoard():
         # initialize the new position equal to the previous position
         new_state.pos[-1, :, :, :] = state.pos[-1, :, :, :]
         if not GoBoard.is_pass_action(action):
-            new_state.pos[-1, :, :, :] = GoBoard.next_position(new_state.pos[-1],
-                                                               state.player,
-                                                               action)
+            new_position = GoBoard.next_position(new_state.pos[-1], state.player, action)
+            if new_position is None:
+                # invalid position, suicide?
+                return None, None
+            # check for ko
+            if np.all(new_position == state.pos[-2]):
+                return None, None
+            new_state.pos[-1, :, :, :] = new_position            
 
         # check for game end
         twice_passed = np.all(new_state.pos[-3] == new_state.pos[-2]) and \
@@ -85,12 +90,26 @@ class GoBoard():
     def next_position(position, player, action):
         new_position = position.copy()
         row, col = GoBoard.get_action_coords(action)
+        other_player = 1-player
         # place stone
         new_position[player, row, col] = 1
-        board_full = GoBoard.is_board_full(new_position)
-        # check and remove opponents stones without liberties
-        if not board_full:
-            GoBoard.make_liberties_in_place(new_position, player)
+        
+        near_opponent_stone = (row-1>=0 and new_position[other_player, row-1, col] == 1) or \
+                              (row+1<BOARD_SIZE and new_position[other_player, row+1, col] == 1) or \
+                              (col-1>=0 and new_position[other_player, row, col-1] == 1) or \
+                              (col+1<BOARD_SIZE and new_position[other_player, row, col+1] == 1)
+        near_own_stone = (row-1>=0 and new_position[player, row-1, col] == 1) or \
+                        (row+1<BOARD_SIZE and new_position[player, row+1, col] == 1) or \
+                        (col-1>=0 and new_position[player, row, col-1] == 1) or \
+                        (col+1<BOARD_SIZE and new_position[player, row, col+1] == 1)
+        # only check liberties if the opponent has any adjacent stone
+        if near_opponent_stone or near_own_stone:
+            # check and remove opponents stones without liberties                
+            num_taken_opponent, num_taken_own = GoBoard.make_liberties_in_place(new_position, player)
+            # check for suicide
+            if num_taken_own>0:
+                return None
+
         return new_position
 
 
@@ -98,18 +117,26 @@ class GoBoard():
     def make_liberties_in_place(pos, current_player):
         assert pos.shape == (2, BOARD_SIZE, BOARD_SIZE)
         other_player = 1-current_player
-        board = pos[current_player, :, :] + -1*pos[other_player, :, :]
-        padded_board = np.pad(board, 1, mode='constant', constant_values=1)
-        while True:
-            rows, cols = np.where(padded_board == 0)
-            if rows.size == 0:
-                break
-            all_rows = np.concatenate([rows, rows-1, rows+1, rows, rows])
-            all_cols = np.concatenate([cols, cols, cols, cols-1, cols+1])
-            padded_board[all_rows, all_cols] += 1
+        board = 3 - 2*pos[current_player, :, :] - pos[other_player, :, :]
+        liberties = list(zip(*np.where(board == 3)))
+        while len(liberties)>0:
+            new_liberties = []
+            for r, c in liberties:
+                for vr, vc in [(r+1, c), (r-1, c), (r, c+1), (r, c-1)]:
+                    if not 0<=vr<BOARD_SIZE or not 0<=vc<BOARD_SIZE: continue
+                    if board[vr, vc]<3 and (board[r, c]==3 or board[r, c]-3==board[vr, vc]):
+                        board[vr, vc] += 3
+                        new_liberties.append((vr, vc))                    
+            liberties = new_liberties
 
-        taken_x, taken_y = np.where(padded_board[1:-1, 1:-1] < 0)
-        pos[other_player, taken_x, taken_y] = 0
+        oth_pl_taken_rows, oth_pl_taken_cols = np.where(board == 2)        
+        curr_pl_taken_rows, curr_pl_taken_cols = np.where(board == 1)        
+        pos[other_player, oth_pl_taken_rows, oth_pl_taken_cols] = 0
+        
+        oth_taken_set = set(zip(oth_pl_taken_rows, oth_pl_taken_cols))
+        curr_taken_with_new_liberties = [(r, c) for r, c in zip(curr_pl_taken_rows, curr_pl_taken_cols) \
+                                        if len(oth_taken_set.intersection(set([(r+1, c), (r-1, c), (r, c+1), (r, c-1)])))>0]
+        return oth_pl_taken_rows.size, curr_pl_taken_rows.size-len(curr_taken_with_new_liberties)
 
 
     @staticmethod
@@ -137,28 +164,11 @@ class GoBoard():
 
 
     @staticmethod
-    def valid_actions(state):
+    def maybe_valid_actions(state):
         current_player = state.player
         other_player = 1-current_player
-
-        stones_taken_prev_move = state.pos[-1, current_player, :, :] != state.pos[-2, current_player, :, :]
-        current_player_prev_move_taken = np.sum(stones_taken_prev_move)
-        check_for_ko = current_player_prev_move_taken == 1
-
-        board = state.pos[-1, current_player, :, :] + state.pos[-1, other_player, :, :]
+        board = state.pos[-1, current_player, :, :] | state.pos[-1, other_player, :, :]
         possible_positions = list(zip(*np.where(board == 0)))
-
-        if check_for_ko:
-            check_r, check_c = np.where(stones_taken_prev_move == 1)
-            assert len(check_r) == 1
-            assert (check_r, check_c) in possible_positions
-
-            new_action = GoBoard.encode_action(check_r, check_c)
-            possible_ko_pos = GoBoard.next_position(state.pos[-1, :, :, :], current_player, new_action)
-
-            if np.all(possible_ko_pos == state.pos[-2]):
-                possible_positions.remove((check_r, check_c))
-
         valid_acts = [GoBoard.encode_action(r, c) for r, c in possible_positions] + \
                      [GoBoard.encode_action(None)]
         return valid_acts
@@ -168,6 +178,22 @@ class GoBoard():
     def board_reach(pos, curr_player):
         oth_player = 1-curr_player
         board = 1*pos[curr_player, :, :] + 2*pos[oth_player, :, :]
+        while True:
+            rows, cols = np.where(board == 1)
+            if rows.size == 0:                
+                break        
+            cells = {}
+            for r, c in zip(rows, cols):
+                cells[(r, c)]=1
+                if r+1<BOARD_SIZE: cells[(r+1, c)]=1
+                if r-1>=0: cells[(r-1, c)]=1
+                if c+1<BOARD_SIZE: cells[(r, c+1)]=1
+                if c-1>=0: cells[(r, c-1)]=1                
+            for r, c in cells.keys():
+                board[r, c] += 1
+        return board > 0
+
+
         padded_board = np.pad(board, 1, mode='constant', constant_values=2)
         while True:
             rows, cols = np.where(padded_board == 1)
