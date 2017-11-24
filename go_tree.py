@@ -3,6 +3,7 @@ from go_board import *
 from game import *
 from hyper_params import *
 from model import *
+import go_board
 
 class GoTreeNode():
     def __init__(self, state=None, action_taken=None, prob=None):
@@ -77,7 +78,7 @@ class GoPlayer():
             if action_node.state is None:
                 # an invalid action node has been chosen, remove the node and try again
                 logging.debug("Encountered invalid action: %d for player %d in position:\n%s", 
-                                action, self.root.state.player, GoBoard.to_pretty_print(self.root.state.pos[-1]))
+                                action, self.root.state.player, go_board.to_pretty_print(self.root.state.pos[-1]))
                 logging.debug("act_distrib: %s", act_distrib)
                 act_distrib[action] = 0.0
                 act_distrib = act_distrib / np.sum(act_distrib)
@@ -91,7 +92,7 @@ class GoPlayer():
     def ensure_node_state(self, node):
         if node.state is not None:
             return
-        node.state, node.outcome = GoBoard.next_state(node.parent.state, node.action_taken)
+        node.state, node.outcome = go_board.next_state(node.parent.state, node.action_taken)
 
     def remove_node(self, node):
         del node.parent.actions[node.action_taken]
@@ -144,19 +145,19 @@ class GoPlayer():
             return None
 
         if node.outcome is not None:
-            if node.outcome == GoBoard.OUTCOME_DRAW:
+            if node.outcome == OUTCOME_DRAW:
                 value = REWARD_DRAW
             else:            
-                if node.state.player==PLAYER_1 and node.outcome==GoBoard.OUTCOME_WIN_PLAYER_1:
+                if node.state.player==PLAYER_1 and node.outcome==OUTCOME_WIN_PLAYER_1:
                     value = REWARD_WIN
                 else:
                     value = REWARD_LOOSE
         else:            
-            augumented_state = GoBoard.sample_dihedral_transformation(node.state)
+            augumented_state = go_board.sample_dihedral_transformation(node.state)
             value, actions_probalities = self.model.predict(augumented_state)        
 
             # expand all valid? actions
-            valid_actions = GoBoard.maybe_valid_actions(node.state)
+            valid_actions = go_board.maybe_valid_actions(node.state)
             for action in valid_actions:
                 new_node = GoTreeNode(state=None, action_taken=action, prob=actions_probalities[action])
                 node.add_child(action, new_node)

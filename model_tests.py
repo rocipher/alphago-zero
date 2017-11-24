@@ -3,13 +3,14 @@ import logging
 
 from model import *
 from hyper_params import *
+import go_board
 
 class TestGoBoard(unittest.TestCase):
 
     def test_create_model(self):
         logging.debug("start")
         model = SimpleNNModel()
-        state = GoBoard.create_zero_state(0)
+        state = go_board.create_zero_state(0)
         val, act_prob = model.predict(state)
         logging.debug(val.shape)
     

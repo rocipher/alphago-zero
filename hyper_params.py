@@ -19,6 +19,9 @@ PLAYER_2 = 1
 REWARD_DRAW = 0.0
 REWARD_WIN = 1.0
 REWARD_LOOSE = -1.0
+OUTCOME_DRAW = 0
+OUTCOME_WIN_PLAYER_1 = 1
+OUTCOME_WIN_PLAYER_2 = 2
 BOARD_SIZE = 5
 # first 3% of the moves have temperature 1.0 (exploratory), the rest have 0.0 temperature
 #ZERO_TEMP_MOVE_INDEX = int(BOARD_SIZE*BOARD_SIZE/2*0.16) # 16% of the max nr of moves

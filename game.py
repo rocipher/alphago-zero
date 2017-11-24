@@ -5,7 +5,7 @@ from go_board import *
 from go_tree import *
 from model import *
 from hyper_params import *
-
+import go_board
 
 class GameMove():
     def __init__(self, state=None, action_distribution=None, value=None):
@@ -47,8 +47,8 @@ def play_game(player_1=None, player_2=None):
         
         current_player_root = players[current_player].root
         logging.debug("Move %d, Player %d: action (%d, %d) -> (n, q, score): next: (%d, %.2f, %.2f)\n%s",
-                        move_index, current_state.player, *GoBoard.get_action_coords(action_taken), 
+                        move_index, current_state.player, *go_board.get_action_coords(action_taken), 
                         current_player_root.n, current_player_root.q, current_player_root.score,
-                        GoBoard.to_pretty_print(current_state.pos[-1]))
+                        go_board.to_pretty_print(current_state.pos[-1]))
 
     return outcome, game_history

@@ -1,6 +1,7 @@
 import unittest
 from go_board import GoBoard, GameState
 from hyper_params import *
+from go_board import *
 
 class TestGoBoard(unittest.TestCase):
 
@@ -12,7 +13,7 @@ class TestGoBoard(unittest.TestCase):
             [0, 2, 0, 1, 0],
             [0, 0, 0, 0, 0]
         ])
-        pos = GoBoard.make_pos_from_matrix(mat_pos)
+        pos = make_pos_from_matrix(mat_pos)
         self.assertEqual(pos.shape, (2, BOARD_SIZE, BOARD_SIZE))
 
 
@@ -24,9 +25,9 @@ class TestGoBoard(unittest.TestCase):
             [0, 2, 0, 1, 0],
             [0, 0, 0, 0, 0]
         ])        
-        pos = GoBoard.make_pos_from_matrix(mat_pos)        
+        pos = make_pos_from_matrix(mat_pos)        
         prev_pos = pos.copy()
-        GoBoard.make_liberties_in_place(pos, 2-1)
+        make_liberties_in_place(pos, 2-1)
         self.assertTrue(np.sum(prev_pos[0] != pos[0]) == 2)
 
     def test_check_suicide(self):
@@ -37,8 +38,8 @@ class TestGoBoard(unittest.TestCase):
             [0, 2, 0, 1, 0],
             [0, 0, 0, 0, 0]
         ])        
-        pos = GoBoard.make_pos_from_matrix(mat_pos)
-        new_pos = GoBoard.next_position(pos, PLAYER_1, GoBoard.encode_action(2, 1))
+        pos = make_pos_from_matrix(mat_pos)
+        new_pos = next_position(pos, PLAYER_1, encode_action(2, 1))
         self.assertTrue(new_pos is None)
 
     def test_next_state(self):
@@ -55,10 +56,10 @@ class TestGoBoard(unittest.TestCase):
             [0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0]
             ])]        
-        state = GoBoard.create_zero_state(0)
+        state = create_zero_state(0)
         # set the last 2 states
-        state.pos[-2:] = np.array([GoBoard.make_pos_from_matrix(pos) for pos in mat_positions])
-        new_state, outcome = GoBoard.next_state(state, GoBoard.encode_action(3, 0))
+        state.pos[-2:] = np.array([make_pos_from_matrix(pos) for pos in mat_positions])
+        new_state, outcome = next_state(state, encode_action(3, 0))
         self.assertTrue(new_state.player == 1)
         self.assertTrue(outcome is None)
 
@@ -76,12 +77,12 @@ class TestGoBoard(unittest.TestCase):
             [0, 0, 2, 2, 2],
             [0, 0, 0, 2, 0]
             ])]        
-        state = GoBoard.create_zero_state(0)
+        state = create_zero_state(0)
         # set the last 2 states
-        state.pos[-2:] = np.array([GoBoard.make_pos_from_matrix(pos) for pos in mat_positions])
-        new_state, outcome = GoBoard.next_state(state, GoBoard.encode_action(None))
+        state.pos[-2:] = np.array([make_pos_from_matrix(pos) for pos in mat_positions])
+        new_state, outcome = next_state(state, encode_action(None))
         self.assertTrue(new_state.player == 1)
-        self.assertTrue(outcome == GoBoard.OUTCOME_WIN_PLAYER_2)
+        self.assertTrue(outcome == OUTCOME_WIN_PLAYER_2)
 
 
     def test_valid_actions(self):
@@ -99,18 +100,18 @@ class TestGoBoard(unittest.TestCase):
             [0, 0, 0, 0, 0]
             ])]        
 
-        state = GoBoard.create_zero_state(PLAYER_1)
+        state = create_zero_state(PLAYER_1)
         # set the last 2 states
-        state.pos[-2:] = np.array([GoBoard.make_pos_from_matrix(pos) for pos in mat_positions])
+        state.pos[-2:] = np.array([make_pos_from_matrix(pos) for pos in mat_positions])
         self.assertTrue(state.pos.shape == (STATE_HIST_SIZE, 2, BOARD_SIZE, BOARD_SIZE))
 
-        valid_acts = GoBoard.maybe_valid_actions(state)
+        valid_acts = maybe_valid_actions(state)
         #print(valid_acts)
         brd = np.zeros((BOARD_SIZE, BOARD_SIZE))        
         for act in valid_acts:
-            new_state, outome = GoBoard.next_state(state, act)
-            if new_state is not None and not GoBoard.is_pass_action(act):
-                brd[GoBoard.get_action_coords(act)] = 1
+            new_state, outome = next_state(state, act)
+            if new_state is not None and not is_pass_action(act):
+                brd[get_action_coords(act)] = 1
         self.assertTrue(brd[1, 1] == 0)        
         #print(brd)        
 
