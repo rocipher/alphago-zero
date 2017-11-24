@@ -16,21 +16,17 @@ class GoTreeNode():
         self.state = state
         self.parent = None        
         self.actions = {}
-        self.score = None
 
     def add_value(self, value):
         self.w += value
         self.n += 1
-        self.q = self.w / self.n
-        if self.parent is not None:
-            self.score = self.calc_score()
+        self.q = self.w / self.n      
 
     def calc_score(self):
-        return self.q + C_PUCT*self.p*np.sqrt(self.parent.n)/(1+self.n)
+        return self.q + C_PUCT*self.p*np.sqrt(1+self.parent.n)/(1+self.n)
 
     def add_child(self, action: int, child_node):
         child_node.parent = self
-        child_node.score = child_node.calc_score()
         self.actions[action] = child_node        
 
 
@@ -134,7 +130,7 @@ class GoPlayer():
         # where U(s, a) = Cpuct*P(s, a)sum_over_b(N(s, b))/(1+N(s, a)))
         node = self.root
         while len(node.actions) > 0:            
-            max_action = max(node.actions, key=lambda k: node.actions[k].score)
+            max_action = max(node.actions, key=lambda k: node.actions[k].calc_score())
             node = node.actions[max_action]
         return node
 

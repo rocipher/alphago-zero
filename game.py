@@ -46,9 +46,9 @@ def play_game(player_1=None, player_2=None):
         current_state = players[current_player].root.state
         
         current_player_root = players[current_player].root
-        logging.debug("Move %d, Player %d: action (%d, %d) -> (n, q, score): next: (%d, %.2f, %.2f)\n%s",
+        logging.debug("Move %d, Player %d: action (%d, %d) -> (n, q): next: (%d, %.2f, %.2f)\n%s",
                         move_index, current_state.player, *go_board.get_action_coords(action_taken), 
-                        current_player_root.n, current_player_root.q, current_player_root.score,
+                        current_player_root.n, current_player_root.q,
                         go_board.to_pretty_print(current_state.pos[-1]))
 
     return outcome, game_history
