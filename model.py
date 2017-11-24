@@ -58,7 +58,7 @@ class SimpleNNModel(Model):
 
     def train_on_hist_batch(self, hist_batch):
         x = np.array([self.get_input_from_state(game_move.state) for game_move in hist_batch])
-        y = [np.array([game_move.outcome for game_move in hist_batch]),
+        y = [np.array([game_move.value for game_move in hist_batch]),
              np.array([game_move.action_distribution for game_move in hist_batch])]
         self.model.train_on_batch(x, y)
 
@@ -118,4 +118,5 @@ class SimpleNNModel(Model):
         policy_head = layers.Activation("relu")(policy_head)
         policy_head = layers.Flatten()(policy_head)
         policy_head = layers.Dense(BOARD_SIZE*BOARD_SIZE+1)(policy_head)
+        policy_head = layers.Activation("softmax")(policy_head)
         return policy_head
