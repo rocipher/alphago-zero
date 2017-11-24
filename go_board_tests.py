@@ -1,5 +1,4 @@
 import unittest
-from go_board import GoBoard, GameState
 from hyper_params import *
 from go_board import *
 
