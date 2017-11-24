@@ -74,7 +74,7 @@ def train_loop():
             best_model.save("%s/model-%s-%d-%.0f.h5" % (OUTPUT_DIR, log_id, iter_index, new_model_win_ratio*100))
             del old_best
 
-        gc.collect()        
+        gc.collect()
 
     
 if __name__ == "__main__":
@@ -84,6 +84,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger()
     logger.addHandler(log_file_handler)
-    #logger.addHandler(logging.StreamHandler())
 
     train_loop()
