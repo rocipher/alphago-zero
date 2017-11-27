@@ -9,20 +9,22 @@ GameState = namedtuple('GameState', ['player', 'pos'])
 def sample_dihedral_transformation(state):
     transformations = [
                         # rotations
-                        lambda m: m,
-                        lambda m: np.rot90(m, k=1),
-                        lambda m: np.rot90(m, k=2),
-                        lambda m: np.rot90(m, k=3),                           
+                        (lambda m: m, lambda m: m),
+                        (lambda m: np.rot90(m, k=1), lambda m: np.rot90(m, k=-1)),
+                        (lambda m: np.rot90(m, k=2), lambda m: np.rot90(m, k=-2)),
+                        (lambda m: np.rot90(m, k=3), lambda m: np.rot90(m, k=-3)),
                         # reflections
-                        lambda m: np.flipud(m),
-                        lambda m: np.flipud(np.rot90(m, k=1)),                           
-                        lambda m: np.flipud(np.rot90(m, k=2)),
-                        lambda m: np.flipud(np.rot90(m, k=3))]
-    sample_transform = np.random.choice(transformations)
+                        (lambda m: np.flipud(m), lambda m: np.flipud(m)),
+                        (lambda m: np.flipud(np.rot90(m, k=1)), lambda m: np.rot90(np.flipud(m), k=-1)),
+                        (lambda m: np.flipud(np.rot90(m, k=1)), lambda m: np.rot90(np.flipud(m), k=-2)),
+                        (lambda m: np.flipud(np.rot90(m, k=1)), lambda m: np.rot90(np.flipud(m), k=-3))
+                      ]
+    transform_indx = np.random.choice(len(transformations))
+    sample_transform_direct, sample_transform_inverse = transformations[transform_indx]
     new_state = create_zero_state(state.player)        
     for ix, px in itertools.product(range(state.pos.shape[0]), range(state.pos.shape[1])):
-        new_state.pos[ix, px, :, :] = sample_transform(state.pos[ix, px, :, :])
-    return new_state
+        new_state.pos[ix, px, :, :] = sample_transform_direct(state.pos[ix, px, :, :])
+    return new_state, sample_transform_inverse
 
 
 def create_zero_state(player):
@@ -34,13 +36,22 @@ def next_state(state: GameState, action) -> GameState:
         Returns the next state after an action is taken
         Returns: new_state, outcome
     """
-    new_state = create_zero_state(1-state.player)
+    current_player = state.player
+    other_player = 1-current_player
+
+    if not is_pass_action(action):
+        row, col = get_action_coords(action)
+        if state.pos[-1, current_player, row, col] | state.pos[-1, other_player, row, col]:
+            # intersection alreay played
+            return None, None
+
+    new_state = create_zero_state(other_player)
     # shift history position to the left
     new_state.pos[0:STATE_HIST_SIZE-1, :, :, :] = state.pos[1:STATE_HIST_SIZE, :, :, :]
     # initialize the new position equal to the previous position
     new_state.pos[-1, :, :, :] = state.pos[-1, :, :, :]
     if not is_pass_action(action):
-        new_position = next_position(new_state.pos[-1], state.player, action)
+        new_position = next_position(new_state.pos[-1], current_player, action)
         if new_position is None:
             # invalid position, suicide?
             return None, None
@@ -68,8 +79,8 @@ def to_pretty_print(pos):
         board_str += "".join(board_line_str) + "\n"
     return board_str
 
-def make_pos_from_matrix(mat):
-    return np.array([mat == 1, mat == 2])
+def make_pos_from_matrix(mat, pl_1=1, pl_2=2):
+    return np.array([mat == pl_1, mat == pl_2])
 
 def is_board_full(pos):
     return np.all(pos[PLAYER_1] | pos[PLAYER_2])

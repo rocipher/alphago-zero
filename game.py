@@ -43,12 +43,10 @@ def play_game(player_1=None, player_2=None):
         if not self_play:
             players[other_player].opponent_played(move_index, action_taken)
         game_history.append(GameMove(current_state, act_distrib, value))
-        current_state = players[current_player].root.state
+        current_state = players[current_player].root.state        
         
-        current_player_root = players[current_player].root
-        logging.debug("Move %d, Player %d: action (%d, %d) -> (n, q): next: (%d, %.2f, %.2f)\n%s",
-                        move_index, current_state.player, *go_board.get_action_coords(action_taken), 
-                        current_player_root.n, current_player_root.q,
-                        go_board.to_pretty_print(current_state.pos[-1]))
+        logging.debug("Move %d, Player %d: action (%d, %d) -> value: %.2f, otc: %s\n%s",
+                        move_index, 1-current_state.player, *go_board.get_action_coords(action_taken), 
+                        value, outcome, go_board.to_pretty_print(current_state.pos[-1]))
 
     return outcome, game_history

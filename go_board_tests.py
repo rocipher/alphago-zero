@@ -29,17 +29,24 @@ class TestGoBoard(unittest.TestCase):
         make_liberties_in_place(pos, 2-1)
         self.assertTrue(np.sum(prev_pos[0] != pos[0]) == 2)
 
-    def test_check_suicide(self):
-        mat_pos = np.array([
-            [0, 2, 0, 0, 1],
-            [2, 1, 2, 0, 0],
-            [2, 0, 2, 0, 2],
-            [0, 2, 0, 1, 0],
-            [0, 0, 0, 0, 0]
-        ])        
-        pos = make_pos_from_matrix(mat_pos)
-        new_pos = next_position(pos, PLAYER_1, encode_action(2, 1))
-        self.assertTrue(new_pos is None)
+    def test_check_suicide(self):     
+        mat_pos = self.mat_positions_from_string("""
+            -O--x
+            OxO--
+            O-O-O
+            -O-x-
+            -----
+
+            xxxxx
+            Oxxxx
+            --OO-
+            OxOOx
+            -O-OO
+        """)
+        moves = [(PLAYER_1, encode_action(2, 1)), (PLAYER_1, encode_action(4, 2))]
+        for pos, (player, action) in zip(mat_pos, moves):
+            new_pos = next_position(make_pos_from_matrix(pos), player, action)
+            self.assertTrue(new_pos is None)
 
     def test_next_state(self):
         mat_positions = [np.array([
@@ -62,6 +69,18 @@ class TestGoBoard(unittest.TestCase):
         self.assertTrue(new_state.player == 1)
         self.assertTrue(outcome is None)
 
+    def test_next_state_take_all(self):
+        pos = self.mat_positions_from_string("""
+            OO-OO
+            OOOOO
+            OOOOO
+            OOOOO
+            OOOOO
+        """)[0]
+        new_pos = next_position(make_pos_from_matrix(pos), PLAYER_1, encode_action(0, 2))
+        print(to_pretty_print(new_pos))
+        
+
     def test_next_state_end_game(self):
         mat_positions = [np.array([
             [0, 2, 1, 1, 1],
@@ -82,7 +101,52 @@ class TestGoBoard(unittest.TestCase):
         new_state, outcome = next_state(state, encode_action(None))
         self.assertTrue(new_state.player == 1)
         self.assertTrue(outcome == OUTCOME_WIN_PLAYER_2)
+    
+    def mat_positions_from_string(self, positions):        
+        pos_numeric = positions.replace("O", "2") \
+                              .replace("x", "1") \
+                              .replace("-", "0")
+        mat_positions = np.array([[list(ln.strip()) for ln in p.strip().split("\n")] 
+                            for p in pos_numeric.split("\n\n")], dtype=int)
+        return mat_positions
 
+
+    def test_calc_game_outcome(self):
+        positons = """
+        OOOOO
+        OOOOO
+        OOxOO
+        OOOOO
+        OOOO-
+
+        OOOxO
+        -OOOO
+        OOxOO
+        OOOOO
+        OOOOx
+
+        OOOOx
+        OOOOO
+        xxOOO
+        xO-OO
+        OOOxO
+
+        x--O-
+        --O-x
+        Ox-OO
+        -xOxx
+        OOO-O
+
+        -xxx-
+        -OxOO
+        x-OO-
+        x-x-O
+        O--x-
+        """        
+        mat_positions = self.mat_positions_from_string(positons)
+        outcomes = [calc_game_outcome(make_pos_from_matrix(m)) for m in mat_positions]
+        self.assertTrue(outcomes == [OUTCOME_WIN_PLAYER_2, OUTCOME_WIN_PLAYER_2, OUTCOME_WIN_PLAYER_2, OUTCOME_WIN_PLAYER_2, OUTCOME_DRAW])
+        
 
     def test_valid_actions(self):
         mat_positions = [np.array([
