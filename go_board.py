@@ -6,6 +6,13 @@ import itertools
 
 GameState = namedtuple('GameState', ['player', 'pos'])
 
+
+def apply_transform(state, transform_func):
+    new_state = create_zero_state(state.player)        
+    for ix, px in itertools.product(range(state.pos.shape[0]), range(state.pos.shape[1])):
+        new_state.pos[ix, px, :, :] = transform_func(state.pos[ix, px, :, :])    
+    return new_state
+
 def sample_dihedral_transformation(state):
     transformations = [
                         # rotations
@@ -16,14 +23,12 @@ def sample_dihedral_transformation(state):
                         # reflections
                         (lambda m: np.flipud(m), lambda m: np.flipud(m)),
                         (lambda m: np.flipud(np.rot90(m, k=1)), lambda m: np.rot90(np.flipud(m), k=-1)),
-                        (lambda m: np.flipud(np.rot90(m, k=1)), lambda m: np.rot90(np.flipud(m), k=-2)),
-                        (lambda m: np.flipud(np.rot90(m, k=1)), lambda m: np.rot90(np.flipud(m), k=-3))
+                        (lambda m: np.flipud(np.rot90(m, k=2)), lambda m: np.rot90(np.flipud(m), k=-2)),
+                        (lambda m: np.flipud(np.rot90(m, k=3)), lambda m: np.rot90(np.flipud(m), k=-3))
                       ]
     transform_indx = np.random.choice(len(transformations))
     sample_transform_direct, sample_transform_inverse = transformations[transform_indx]
-    new_state = create_zero_state(state.player)        
-    for ix, px in itertools.product(range(state.pos.shape[0]), range(state.pos.shape[1])):
-        new_state.pos[ix, px, :, :] = sample_transform_direct(state.pos[ix, px, :, :])
+    new_state = apply_transform(state, sample_transform_direct)
     return new_state, sample_transform_inverse
 
 
@@ -61,10 +66,13 @@ def next_state(state: GameState, action) -> GameState:
         new_state.pos[-1, :, :, :] = new_position            
 
     # check for game end
-    twice_passed = np.all(new_state.pos[-3] == new_state.pos[-2]) and \
-                    np.all(new_state.pos[-2] == new_state.pos[-1])
-    board_full = is_board_full(new_state.pos[-1])
-    if twice_passed or board_full:
+    # check twice passed
+    game_ended = False
+    game_ended = game_ended or (np.all(new_state.pos[-3] == new_state.pos[-2]) and \
+                                np.all(new_state.pos[-2] == new_state.pos[-1]))
+    # check board full
+    game_ended = game_ended or (is_board_full(new_state.pos[-1]))
+    if game_ended:
         outcome = calc_game_outcome(new_state.pos[-1])
     else:
         outcome = None

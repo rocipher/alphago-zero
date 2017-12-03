@@ -15,7 +15,7 @@ class GoTreeNode():
         self.sum_n = 0
         self.outcome = outcome
         self.state = state
-        self.parent = None        
+        self.parent = None 
         self.actions = {}
 
     def add_value(self, action, value):
@@ -24,8 +24,15 @@ class GoTreeNode():
         self.sum_n += 1
         self.q[action] = self.w[action] / self.n[action]
 
-    def puct_distrib(self):
-        return self.q + C_PUCT*self.p*np.sqrt(self.sum_n)/(1+self.n)
+    def add_noise(self, probs, noise_alpha=0.0):
+        if noise_alpha == 0.0:
+            return probs                
+        dirichlet_alpha = np.repeat(noise_alpha, ACTION_SPACE_SIZE)
+        dirichlet_noise = np.random.dirichlet(alpha=dirichlet_alpha)
+        return (1.0-ACT_NOISE_EPS)*self.p + ACT_NOISE_EPS*dirichlet_noise                
+
+    def puct_distrib(self, noise_alpha=0.0):        
+        return self.q + C_PUCT*self.add_noise(self.p, noise_alpha)*np.sqrt(self.sum_n)/(1+self.n)
 
     def add_child(self, action: int, child_node):
         child_node.parent = self
@@ -61,44 +68,23 @@ class GoPlayer():
         self.run_mcts(MCTS_STEPS)        
                 
         temperature = self.find_temperature(move_index)
-        act_distrib = self.count_probabilites(self.root, temperature)
+        count_probs = self.count_probabilites(self.root, temperature)
 
         logging.debug("Move index: %d\nn: %s\np: %s\nq: %s\npuct: %s",
                      move_index, self.root.n, 
                      GoPlayer.vector_pretty_print(self.root.p), 
                      GoPlayer.vector_pretty_print(self.root.q), 
-                     GoPlayer.vector_pretty_print(self.root.puct_distrib()))
+                     GoPlayer.vector_pretty_print(self.root.puct_distrib(0.0)))
 
-        if self.noise_alpha > 0.0:
-            # add Dir(0.03) dirichlet noise for additional exploration 
-            dirichlet_alpha = np.repeat(self.noise_alpha, ACTION_SPACE_SIZE)
-            dirichlet_noise = np.random.dirichlet(alpha=dirichlet_alpha)
-            act_distrib = (1.0-ACT_NOISE_EPS)*act_distrib + ACT_NOISE_EPS*dirichlet_noise
-        
         # action distribution sanity check        
-        assert np.abs(np.sum(act_distrib)-1.0)<1e-7, "Invalid act_distrib: sum=%.7f, n=%d, action_n:%s, distrib: %s" % (np.sum(act_distrib), tree.root.n, np.sum([act.n for act in tree.root.actions.values()]), act_distrib)
-        assert np.product(act_distrib.shape) == (ACTION_SPACE_SIZE,)
+        assert np.abs(np.sum(count_probs)-1.0)<1e-7, "Invalid count_probs: sum=%.7f" % np.sum(count_probs)
+        assert np.product(count_probs.shape) == (ACTION_SPACE_SIZE,)
         
-        while True:
-            action = np.random.choice(ACTION_SPACE_SIZE, p=act_distrib)
-            q_action = self.root.q[action]
-            if action not in self.root.actions:
-                action_node, _ = self.expand(self.root, action)
-            else:
-                action_node = self.root.actions[action]
-            
-            if action_node is None:
-                # an invalid action node has been chosen, remove the node and try again
-                # logging.debug("Encountered invalid action: %d for player %d in position:\n%s", 
-                #                 action, self.root.state.player, go_board.to_pretty_print(self.root.state.pos[-1]))
-                #logging.debug("act_distrib: %s", act_distrib)
-                act_distrib[action] = 0.0
-                act_distrib = act_distrib / np.sum(act_distrib)                     
-            else:
-                self.make_root(action_node)
-                break
+        action = np.random.choice(ACTION_SPACE_SIZE, p=count_probs)
+        q_action = self.root.q[action]
+        self.make_root(self.root.actions[action])
 
-        return act_distrib, action, q_action, self.root.outcome    
+        return count_probs, action, q_action, self.root.outcome    
 
 
     def run_mcts(self, num_steps):       
@@ -129,17 +115,16 @@ class GoPlayer():
         logging.debug("MCTS size: %d", self.root.sum_n)
 
     def count_probabilites(self, node: GoTreeNode, temperature):
-        new_act_probabilities = np.zeros(ACTION_SPACE_SIZE, dtype=np.float)        
+        if temperature == 1.0:
+            # optimization for the common case when temperature equals 1.0
+            return node.n/node.sum_n
         if temperature<TEMPERATURE_MIN:
+            new_act_probabilities = np.zeros(ACTION_SPACE_SIZE, dtype=np.float)
             max_action = np.argmax(node.n)
             new_act_probabilities[max_action] = 1.0
         else:                        
-            if temperature == 1.0:
-                # optimization for the common case when temperature equals 1.0
-                new_act_probabilities = node.n/node.sum_n
-            else:
-                exp_action_counts = node.n**(1/temperature)
-                new_act_probabilities = exp_action_counts/np.sum(exp_action_counts)
+            exp_action_counts = node.n**(1/temperature)
+            new_act_probabilities = exp_action_counts/np.sum(exp_action_counts)
         return new_act_probabilities
 
 
@@ -159,15 +144,17 @@ class GoPlayer():
             if node.outcome:
                 max_puct_action = None
                 break
-            max_puct_action = np.argmax(node.puct_distrib())
+            # add dirichlet noise at the root node for additional exploration
+            noise_alpha = self.noise_alpha if node == self.root else 0.0
+            max_puct_action = np.argmax(node.puct_distrib(noise_alpha))
             if max_puct_action in node.actions:
                 node = node.actions[max_puct_action]
             else:
                 break
         return node, max_puct_action
 
-
-    def get_reward(self, outcome, player):
+    @staticmethod
+    def get_reward(outcome, player):
         if outcome == OUTCOME_DRAW:
             return REWARD_DRAW
         else:            
@@ -182,7 +169,7 @@ class GoPlayer():
     def expand(self, node: GoTreeNode, action):
         if node.outcome is not None:
             # this is already an end node, return it's value
-            value = self.get_reward(node.outcome, node.parent.state.player)
+            value = GoPlayer.get_reward(node.outcome, node.parent.state.player)
             return node, value
 
         new_node_state, outcome = go_board.next_state(node.state, action)
@@ -191,18 +178,18 @@ class GoPlayer():
             return None, None
 
         augumented_state, inverse_transform_func = go_board.sample_dihedral_transformation(new_node_state)
-        value, actions_probalities_inversed = self.model.predict(augumented_state)
-        pass_prob = actions_probalities_inversed[ACTION_SPACE_SIZE-1]
-        act_prob_inv_mat = actions_probalities_inversed[:BOARD_SIZE*BOARD_SIZE].reshape(BOARD_SIZE, BOARD_SIZE)        
-        actions_probalities = np.concatenate([inverse_transform_func(act_prob_inv_mat).flatten(), [pass_prob]])
-        
-        assert len(actions_probalities) == ACTION_SPACE_SIZE
-        assert np.abs(np.sum(actions_probalities)-1.0)<1e-4
+        value, prior_probalities_inversed = self.model.predict(augumented_state)
+        pass_prob = prior_probalities_inversed[ACTION_SPACE_SIZE-1]
+        prior_prob_inv_mat = prior_probalities_inversed[:BOARD_SIZE*BOARD_SIZE].reshape(BOARD_SIZE, BOARD_SIZE)
+        prior_probalities = np.concatenate([inverse_transform_func(prior_prob_inv_mat).flatten(), [pass_prob]])
+
+        assert len(prior_probalities) == ACTION_SPACE_SIZE
+        assert np.abs(np.sum(prior_probalities)-1.0)<1e-4
 
         if outcome is not None:
-            value = self.get_reward(outcome, node.state.player)
+            value = GoPlayer.get_reward(outcome, node.state.player)
         new_node = GoTreeNode(state=new_node_state, action_taken=action, 
-                              action_prob_distrib=actions_probalities, outcome=outcome)
+                              action_prob_distrib=prior_probalities, outcome=outcome)
         node.add_child(action, new_node)
         assert value is not None
         return new_node, value

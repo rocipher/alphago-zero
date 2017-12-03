@@ -2,6 +2,8 @@ import gc
 import logging
 import numpy as np
 import datetime
+from queue import Queue
+from multiprocessing import Process
 from collections import deque
 
 from model import *
@@ -10,21 +12,13 @@ from game import *
 import go_board
 
 def evaluate(model_a, model_b, num_games=1):
-    results = []
+    logging.info("Evaluation start:")
+    results = []    
     for eval_game_index in np.arange(num_games):
-        start_player = np.random.choice(2)
-        logging.info("Eval start game %d: start player: %d", eval_game_index, start_player)
-        starting_state = go_board.create_zero_state(start_player)
-        player_1 = GoPlayer(starting_state, model=model_a, noise_alpha=0.0, temperatures=[(0, np.inf, 0.0)])
-        player_2 = GoPlayer(starting_state, model=model_b, noise_alpha=0.0, temperatures=[(0, np.inf, 0.0)])
-        outcome, _ = play_game(player_1=player_1, player_2=player_2)
-        logging.info("Eval end game %d: %d", eval_game_index, outcome)
+        start_player, outcome = two_player_play(eval_game_index, model_a, model_b)        
         results.append((start_player, outcome))
     logging.info("Evaluation end: results: %s", results)
     return results
-
-def actions_uniform_distrib():
-    return np.ones(ACTION_SPACE_SIZE)/ACTION_SPACE_SIZE
 
 def train_loop():
     best_model = SimpleNNModel()
@@ -42,21 +36,12 @@ def train_loop():
         logging.debug("Iter: %d", iter_index)
         
         for game_index in range(NUM_GAMES):
-            start_player = np.random.choice(2)
-            starting_state = go_board.create_zero_state(start_player)            
-            logging.info("Game: %d: start player: %d", game_index, starting_state.player)
-            player = GoPlayer(starting_state, model=best_model, noise_alpha=DIRICHLET_ALPHA, temperatures=TEMPERATURES)
-            outcome, current_game_history = play_game(player_1=player, player_2=None)
-            for game_move in current_game_history:
-                history.append(game_move)
-            logging.info("Game: %d, outcome: %d, end position:\n%s\n", 
-                            game_index, outcome, 
-                            go_board.to_pretty_print(current_game_history[-1].state.pos[-1]))
+            self_play(game_index, best_model, history, noise_alpha=DIRICHLET_ALPHA, temperatures=TEMPERATURES)
                 
         for train_iter_idx in np.arange(NUM_TRAIN_LOOP_ITER):
             logging.debug("Network train: %d", train_iter_idx)
             batch = np.random.choice(history, size=BATCH_SIZE)
-            trained_model.train_on_hist_batch(batch)
+            trained_model.train_on_hist_batch(batch, train_iter_idx)
             
         eval_results = evaluate(trained_model, best_model, num_games=NUM_EVAL_GAMES)
         outcomes = np.array([outcome for _, outcome in eval_results])

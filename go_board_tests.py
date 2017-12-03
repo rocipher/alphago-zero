@@ -148,6 +148,22 @@ class TestGoBoard(unittest.TestCase):
         self.assertTrue(outcomes == [OUTCOME_WIN_PLAYER_2, OUTCOME_WIN_PLAYER_2, OUTCOME_WIN_PLAYER_2, OUTCOME_WIN_PLAYER_2, OUTCOME_DRAW])
         
 
+    def test_dihedral_transformations(self):        
+        mat_pos = self.mat_positions_from_string("""
+            -O--x
+            OxO--
+            O-O-O
+            -O-x-
+            -----
+        """)[0]
+        state = create_zero_state(0)
+        state.pos[-1:] = make_pos_from_matrix(mat_pos)
+        for i in range(8):
+            new_state, inverse_transform_func = sample_dihedral_transformation(state)
+            inv_state = apply_transform(new_state, inverse_transform_func)
+            self.assertTrue(np.equal(inv_state.pos, state.pos).all())
+            
+
     def test_valid_actions(self):
         mat_positions = [np.array([
             [0, 2, 1, 0, 0],
