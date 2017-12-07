@@ -10,7 +10,7 @@ import tensorflow.contrib.keras.api.keras.optimizers as optimizers
 import tensorflow.contrib.keras.api.keras.metrics as metrics
 import tensorflow.contrib.keras.api.keras.callbacks as callbacks
 import tensorflow.contrib.keras.api.keras.regularizers as regularizers
-import tensorflow.contrib.keras.api.keras.backend as tensorflow_backend
+import tensorflow.contrib.keras.api.keras.backend as K
 import tensorflow as tf
 
 from hyper_params import *
@@ -20,6 +20,9 @@ _TF_SESSION_SET = False
 
 class Model():
     def __init__(self):
+        pass
+
+    def set_seed(self):
         pass
 
     def train_on_hist_batch(self, hist_batch, batch_index):
@@ -46,10 +49,12 @@ class SimpleNNModel(Model):
 
         self.model_id = model_id               
         self.data_format = "channels_first"
-        self.batch_norm_axis = 1 
+        self.batch_norm_axis = 1
         self.reg_alpha = 1e-4
 
         input_layer = layers.Input(shape=(STATE_HIST_SIZE*2+1, BOARD_SIZE, BOARD_SIZE), name="input")
+        # NCHW -> NHWC
+        # top_layer = layers.Permute((2, 3, 1))(input_layer)
         top_layer = self.build_convolutional_block(input_layer)
         for _ in np.arange(NUM_RESIDUAL_BLOCKS):
             top_layer = self.build_residual_block(top_layer)
@@ -81,8 +86,12 @@ class SimpleNNModel(Model):
                             log_device_placement=False,
                             gpu_options=gpu_options)
         session = tf.Session(config=config)
-        tensorflow_backend.set_session(session)
+        K.set_session(session)
         _TF_SESSION_SET = True
+
+    def set_seed(self, seed):
+        tf.set_random_seed(seed)
+        np.random.seed(seed)
 
     def write_log(self, callback, names, logs, batch_no):
         # https://gist.github.com/joelthchao/ef6caa586b647c3c032a4f84d52e3a11
