@@ -163,7 +163,7 @@ def train_loop(manager:Manager, log_queue:Queue):
 
             # train NN
             logging.info("Iter %d: Starting network train", iter_index)
-            train_worker.control_pipe.send((ControlActions.TRAIN, None))
+            train_worker.control_pipe.send((ControlActions.TRAIN, iter_index))
             act, result = train_worker.control_pipe.recv()
             assert act == ControlActions.TRAIN_COMPLETED
             logging.info("Iter %d: Ended network train", iter_index)
