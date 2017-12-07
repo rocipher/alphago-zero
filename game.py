@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import time
 
 from go_board import *
 from go_tree import *
@@ -16,28 +17,33 @@ class GameMove():
 
 def self_play(game_index:int, model:Model, history_queue=None, noise_alpha=0.0, temperatures=[(0, np.inf, 0.0)]):
     start_player = np.random.choice(2)
-    starting_state = go_board.create_zero_state(start_player)            
+    starting_state = go_board.create_zero_state(start_player)
+    start_time = time.time()
     logging.info("Game: %d: start player: %d", game_index, starting_state.player)
     player = GoPlayer(starting_state, model=model, noise_alpha=noise_alpha, temperatures=temperatures)
     outcome, game_history = play_game(player_1=player, player_2=None)
     if history_queue is not None:
         for game_move in game_history:
             history_queue.append(game_move)
-    logging.info("Game: %d, outcome: %d, num_moves: %d, end position:\n%s\n", 
-                    game_index, outcome, len(game_history),
+    end_time = time.time()
+    logging.info("Game: %d, outcome: %d, num_moves: %d, game_time(s): %.0f, end position:\n%s\n", 
+                    game_index, outcome, len(game_history), (end_time-start_time),
                     go_board.to_pretty_print(game_history[-1].state.pos[-1]))
     return start_player, outcome
 
 
 def two_player_play(game_index: int, model_a:Model, model_b:Model):
     start_player = np.random.choice(2)
+    start_time = time.time()
     logging.info("Eval start game %d: start player: %d", game_index, start_player)
     starting_state = go_board.create_zero_state(start_player)
     player_1 = GoPlayer(starting_state, model=model_a, noise_alpha=0.0, temperatures=[(0, np.inf, 0.0)])
     player_2 = GoPlayer(starting_state, model=model_b, noise_alpha=0.0, temperatures=[(0, np.inf, 0.0)])
     outcome, moves = play_game(player_1=player_1, player_2=player_2)
-    logging.info("Eval end game %d, num_moves: %d: outcome: %d, end position:\n%s", 
-            game_index, len(moves), outcome, go_board.to_pretty_print(moves[-1].state.pos[-1]))
+    end_time = time.time()
+    logging.info("Eval end game %d, num_moves: %d: outcome: %d, game_time(s): %.0f, end position:\n%s", 
+            game_index, len(moves), outcome, (end_time-start_time),
+            go_board.to_pretty_print(moves[-1].state.pos[-1]))
     return start_player, outcome
 
 
