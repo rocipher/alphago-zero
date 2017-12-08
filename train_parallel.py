@@ -1,5 +1,6 @@
 import gc
 import sys
+import os
 import logging
 from logging.handlers import QueueHandler, QueueListener
 import numpy as np
@@ -17,12 +18,12 @@ import model_parallel
 from model_parallel import ControlActions, MultiProcessModelProxy
 import hyper_params as hp
 import game
+import util
 
 from collections import namedtuple
 from namedlist import namedlist
 
 ModelWorker = namedtuple("ModelWorker", ["process", "model_proxy", "control_pipe", "client_pipes"])
-
 
 class WorkersState:
     def __init__(self, model_proxies:list=[], manager:Manager=None):
@@ -136,14 +137,18 @@ def train_loop(manager:Manager, log_queue:Queue):
                 initializer=pool_worker_init,   
                 initargs=(log_queue,),
                 maxtasksperchild=hp.MAX_GAMES_PER_POOL_WORKER)
-
-    history_queue = manager.list()    
-
+    
+    history_queue_file = "%s/history-queue.h5" % hp.OUTPUT_DIR
+    if os.path.exists(history_queue_file):
+        logging.info("Loading history queue from file: %s", history_queue_file)        
+        history_queue = manager.list(np.rec.array(util.read_from_hdf5_file(history_queue_file, "history_queue")[:]))
+    else:
+        history_queue = manager.list()
+    
     self_play_model_file = hp.SELF_PLAY_MODEL_FILE
     trained_model_file = hp.TRAIN_MODEL_FILE
 
-    num_clients_per_predict_worker = hp.NUM_POOL_WORKERS // hp.NUM_PREDICT_WORKERS
-
+    num_clients_per_predict_worker = hp.NUM_POOL_WORKERS // hp.NUM_PREDICT_WORKERS + 1
     self_play_predict_workers, self_play_model_wstate = spawn_predict_proxies(hp.NUM_PREDICT_WORKERS, 
                         num_clients_per_predict_worker, self_play_model_file, manager, history_queue, log_queue)
 
@@ -184,14 +189,16 @@ def train_loop(manager:Manager, log_queue:Queue):
                 del self_play_model_wstate                
                 del self_play_predict_workers
                                 
-                self_play_model_file = "%s/model-best-%s-%d-%.0f.h5" % (hp.OUTPUT_DIR, log_id, iter_index, trained_model_win_ratio*100)
+                self_play_model_file = "%s/model-best-%00d-%.0f.h5" % (hp.OUTPUT_DIR, iter_index, trained_model_win_ratio*100)
                 save_worker_model(train_worker, self_play_model_file)                
                 
                 self_play_predict_workers, self_play_model_wstate = spawn_predict_proxies(hp.NUM_PREDICT_WORKERS, 
                         num_clients_per_predict_worker, self_play_model_file, manager, history_queue, log_queue)
 
-            trained_model_file = "%s/model-train-%s-%d-%.0f.h5" % (hp.OUTPUT_DIR, log_id, iter_index, trained_model_win_ratio*100)
+            trained_model_file = "%s/model-train-%00d-%.0f.h5" % (hp.OUTPUT_DIR, iter_index, trained_model_win_ratio*100)
             save_worker_model(train_worker, trained_model_file)
+            
+            util.save_to_hdf5_file({ "history_queue": list(history_queue) } , history_queue_file, compression='gzip')
 
             gc.collect()
         # end iter loop
@@ -215,7 +222,7 @@ def logger_init(manager: Manager):
     log_queue = manager.Queue()
 
     formatter = logging.Formatter("%(levelname)s: %(asctime)s - %(process)s - %(message)s")
-    file_handler = logging.FileHandler('%s/%s.log' % (hp.OUTPUT_DIR, log_id))
+    file_handler = logging.FileHandler('%s/run.log' % hp.OUTPUT_DIR)
     file_handler.setFormatter(formatter)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
@@ -230,14 +237,15 @@ def logger_init(manager: Manager):
     logger.addHandler(file_handler)
 
     mp_logger = multiprocessing.log_to_stderr()
-    mp_logger.setLevel(hp.LOG_LEVEL)
+    mp_logger.setLevel(logging.WARNING)
 
     return queue_listener, log_queue
 
 
 if __name__ == "__main__":
-    log_id = "ago-%s-%dx%d-%d" % (datetime.datetime.now().strftime("%m%d%H%M"),
-                                 hp.BOARD_SIZE, hp.BOARD_SIZE, hp.MCTS_STEPS)
+    if not os.path.exists(hp.OUTPUT_DIR):
+        os.makedirs(hp.OUTPUT_DIR)
+
     manager = Manager()
     logq_listener, log_queue = logger_init(manager)
 

@@ -3,9 +3,9 @@ import numpy as np
 from hyper_params import *
 from collections import namedtuple
 import itertools
+from util import create_record
 
-GameState = namedtuple('GameState', ['player', 'pos'])
-
+GameState = np.dtype([('player', np.int), ('pos', np.bool, (STATE_HIST_SIZE, 2, BOARD_SIZE, BOARD_SIZE))])
 
 def apply_transform(state, transform_func):
     new_state = create_zero_state(state.player)        
@@ -31,10 +31,10 @@ def sample_dihedral_transformation(state):
     new_state = apply_transform(state, sample_transform_direct)
     return new_state, sample_transform_inverse
 
-
 def create_zero_state(player):
-    return GameState(player, np.zeros((STATE_HIST_SIZE, 2, BOARD_SIZE, BOARD_SIZE), dtype=np.bool))
-
+    state = create_record(GameState)
+    state.player = player 
+    return state
 
 def next_state(state: GameState, action) -> GameState:
     """

@@ -71,7 +71,7 @@ class SimpleNNModel(Model):
         self.model.compile(optimizer="adam",
                         loss=[losses.mean_squared_error, losses.categorical_crossentropy],
                         metrics=[])
-        model_log_id = "eb-%s-%dx%d-%d-%d" % (datetime.datetime.now().strftime("%m%d%H%M"), BOARD_SIZE, BOARD_SIZE, MCTS_STEPS, BATCH_SIZE)
+        model_log_id = "eb-%s-%d" % (datetime.datetime.now().strftime("%m%d%H%M"), BATCH_SIZE)
         self.tb_callback = callbacks.TensorBoard(log_dir="%s/%s" % (OUTPUT_DIR, model_log_id))
         self.tb_callback.set_model(self.model)
           

@@ -6,14 +6,12 @@ from go_board import *
 from go_tree import *
 from model import *
 from hyper_params import *
+from util import create_record
 import go_board
 
-class GameMove():
-    def __init__(self, state=None, action_distribution=None, value=None):
-        self.state = state
-        self.action_distribution = action_distribution
-        self.value = value
-
+GameMove = np.dtype([('state', go_board.GameState), 
+                     ('action_distribution', np.float, ACTION_SPACE_SIZE),
+                     ('value', np.float)])
 
 def self_play(game_index:int, model:Model, history_queue=None, noise_alpha=0.0, temperatures=[(0, np.inf, 0.0)]):
     start_player = np.random.choice(2)
@@ -46,6 +44,8 @@ def two_player_play(game_index: int, model_a:Model, model_b:Model):
             go_board.to_pretty_print(moves[-1].state.pos[-1]))
     return start_player, outcome
 
+def create_game_move_record(state, action_distribution, value):
+    return create_record(GameMove, value=(state, action_distribution, value))
 
 def play_game(player_1=None, player_2=None):
     """
@@ -71,12 +71,12 @@ def play_game(player_1=None, player_2=None):
     move_index = 0
     while outcome is None:
         move_index += 1        
-        current_player = current_state.player
+        current_player = int(current_state.player)
         other_player = 1-current_player
         act_distrib, action_taken, value, outcome = players[current_player].play(move_index)        
         if not is_self_play:
             players[other_player].opponent_played(move_index, action_taken)
-        game_history.append(GameMove(current_state, act_distrib, None))
+        game_history.append(create_game_move_record(current_state, act_distrib, None))
         current_state = players[current_player].root.state        
         
         logging.debug("Move %d, Player %d: action (%d, %d) -> value: %.2f, otc: %s\n%s",
