@@ -6,33 +6,44 @@ from model import *
 import go_board
 
 class GoTreeNode():
-    def __init__(self, state=None, action_taken=None, action_prob_distrib=None, outcome=None):
+    def __init__(self, state=None, action_taken=None,
+                action_prob_distrib=None, outcome=None):
         self.action_taken = action_taken        
         self.w = np.zeros(ACTION_SPACE_SIZE, dtype=float)
-        self.n = np.zeros(ACTION_SPACE_SIZE, dtype=int)
         self.q = np.zeros(ACTION_SPACE_SIZE, dtype=float)
-        self.p = action_prob_distrib
-        self.sum_n = 0
+        self.n = np.abs(np.random.rand(ACTION_SPACE_SIZE))*EPS
+        self.p = action_prob_distrib        
+        self.sum_n = np.sum(self.n)
         self.outcome = outcome
         self.state = state
         self.parent = None 
         self.actions = {}
+        self.invalidate_actions(invalid_positional_actions(state))
+
+    def invalidate_actions(self, *actions):
+        self.p[actions] = 0.0
+        # renormalize
+        self.p = self.p / np.sum(self.p)        
+        self.sum_n -= np.sum(self.n[actions])
+        self.n[actions] = 0.0
+        self.w[actions] = -np.inf
+        self.q[actions] = -np.inf                                
 
     def add_value(self, action, value):
         self.w[action] += value
-        self.n[action] += 1
-        self.sum_n += 1
-        self.q[action] = self.w[action] / self.n[action]
+        self.n[action] += 1.0
+        self.q[action] = self.w[action]/self.n[action]
+        self.sum_n += 1.0
 
     def add_noise(self, probs, noise_alpha=0.0):
         if noise_alpha == 0.0:
-            return probs                
-        dirichlet_alpha = np.repeat(noise_alpha, ACTION_SPACE_SIZE)
-        dirichlet_noise = np.random.dirichlet(alpha=dirichlet_alpha)
-        return (1.0-ACT_NOISE_EPS)*self.p + ACT_NOISE_EPS*dirichlet_noise                
+            return probs
+        else:
+            dirichlet_noise = np.random.dirichlet(alpha=(probs>0)*noise_alpha)
+            return (1.0-ACT_NOISE_EPS)*probs + ACT_NOISE_EPS*dirichlet_noise
 
     def puct_distrib(self, noise_alpha=0.0):        
-        return self.q + C_PUCT*self.add_noise(self.p, noise_alpha)*np.sqrt(self.sum_n)/(1+self.n)
+        return self.q + C_PUCT*self.add_noise(self.p, noise_alpha)*np.sqrt(1+self.sum_n)/(1+self.n)
 
     def add_child(self, action: int, child_node):
         child_node.parent = self
@@ -42,7 +53,7 @@ class GoTreeNode():
 class GoPlayer():
     def __init__(self, starting_state, model: Model, noise_alpha=0.0, temperatures=None):
         self.model = model
-        _, actions_probalities = self.model.predict(starting_state)
+        _, actions_probalities = self.model.predict(starting_state)        
         self.root = GoTreeNode(state=starting_state, action_taken=None, 
                                action_prob_distrib=actions_probalities, outcome=None)                
         self.noise_alpha = noise_alpha
@@ -68,27 +79,23 @@ class GoPlayer():
         self.run_mcts(MCTS_STEPS)        
                 
         temperature = self.find_temperature(move_index)
-        count_probs = self.count_probabilites(self.root, temperature)
+        next_action_distrib = self.count_probabilites(self.root, temperature)
+        count_probs = self.count_probabilites(self.root, 1.0)
 
         logging.debug("Move index: %d\nn: %s\np: %s\nq: %s\npuct: %s",
-                     move_index, self.root.n, 
+                     move_index, GoPlayer.vector_pretty_print(self.root.n), 
                      GoPlayer.vector_pretty_print(self.root.p), 
                      GoPlayer.vector_pretty_print(self.root.q), 
                      GoPlayer.vector_pretty_print(self.root.puct_distrib(0.0)))
-
-        # action distribution sanity check        
-        assert np.abs(np.sum(count_probs)-1.0)<1e-7, "Invalid count_probs: sum=%.7f" % np.sum(count_probs)
-        assert np.product(count_probs.shape) == (ACTION_SPACE_SIZE,)
         
-        action = np.random.choice(ACTION_SPACE_SIZE, p=count_probs)
-        q_action = self.root.q[action]
+        action = np.random.choice(ACTION_SPACE_SIZE, p=next_action_distrib)        
         self.make_root(self.root.actions[action])
 
-        return count_probs, action, q_action, self.root.outcome    
+        return count_probs, action, self.root.outcome    
 
 
     def run_mcts(self, num_steps):       
-        #logging.debug("MCTS add nodes: %d", num_steps-self.root.sum_n)
+        #logging.debug("MCTS add nodes: %.0f", num_steps-self.root.sum_n)
 
         nodes_added = 0
         while nodes_added<num_steps:
@@ -100,19 +107,14 @@ class GoPlayer():
 
             # if this is an invalid state node, we remove it from the parent's valid actions
             if value is None:
-                # invalidate this action
-                leaf_node.p[new_action] = 0.0
-                # renormalize
-                leaf_node.p = leaf_node.p / np.sum(leaf_node.p)
-                assert leaf_node.n[new_action] == 0
-                leaf_node.w[new_action] = -np.inf
-                leaf_node.q[new_action] = -np.inf
+                # invalidate this action                
+                leaf_node.invalidate_actions(new_action)
             else:
                 nodes_added += 1
                 # backup
                 self.backup(new_node, value)        
 
-        logging.debug("MCTS size: %d", self.root.sum_n)
+        logging.debug("MCTS size: %.0f", self.root.sum_n)
 
     def count_probabilites(self, node: GoTreeNode, temperature):
         if temperature == 1.0:
@@ -185,10 +187,11 @@ class GoPlayer():
 
         assert len(prior_probalities) == ACTION_SPACE_SIZE
         assert np.abs(np.sum(prior_probalities)-1.0)<1e-4
-
+        
         if outcome is not None:
             value = GoPlayer.get_reward(outcome, node.state.player)
-        new_node = GoTreeNode(state=new_node_state, action_taken=action, 
+        
+        new_node = GoTreeNode(state=new_node_state, action_taken=action,
                               action_prob_distrib=prior_probalities, outcome=outcome)
         node.add_child(action, new_node)
         assert value is not None

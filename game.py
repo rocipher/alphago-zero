@@ -73,15 +73,15 @@ def play_game(player_1=None, player_2=None):
         move_index += 1        
         current_player = int(current_state.player)
         other_player = 1-current_player
-        act_distrib, action_taken, value, outcome = players[current_player].play(move_index)        
+        act_distrib, action_taken, outcome = players[current_player].play(move_index)        
         if not is_self_play:
             players[other_player].opponent_played(move_index, action_taken)
         game_history.append(create_game_move_record(current_state, act_distrib, None))
         current_state = players[current_player].root.state        
         
-        logging.debug("Move %d, Player %d: action (%d, %d) -> value: %.2f, otc: %s\n%s",
+        logging.debug("Move %d, Player %d: action (%d, %d) -> otc: %s\n%s",
                         move_index, 1-current_state.player, *go_board.get_action_coords(action_taken), 
-                        value, outcome, go_board.to_pretty_print(current_state.pos[-1]))
+                        outcome, go_board.to_pretty_print(current_state.pos[-1]))
 
     for game_move in game_history:
         game_move.value = GoPlayer.get_reward(outcome, game_move.state.player)

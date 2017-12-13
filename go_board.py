@@ -163,14 +163,12 @@ def encode_action(row=None, col=None):
         return row*BOARD_SIZE + col
 
 
-def maybe_valid_actions(state):
+def invalid_positional_actions(state):
     current_player = state.player
     other_player = 1-current_player
     board = state.pos[-1, current_player, :, :] | state.pos[-1, other_player, :, :]
-    possible_positions = list(zip(*np.where(board == 0)))
-    valid_acts = [encode_action(r, c) for r, c in possible_positions] + \
-                 [encode_action(None)]
-    return valid_acts
+    rows, cols = np.where(board)
+    return rows*BOARD_SIZE+cols
 
 
 def board_reach(pos, curr_player):
