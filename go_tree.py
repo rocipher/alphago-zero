@@ -106,8 +106,7 @@ class GoPlayer():
             new_node, value = self.expand(leaf_node, new_action)
 
             # if this is an invalid state node, we remove it from the parent's valid actions
-            if value is None:
-                # invalidate this action                
+            if value is None:       
                 leaf_node.invalidate_actions(new_action)
             else:
                 nodes_added += 1
